@@ -13,7 +13,6 @@ import streamlit as st
 from st_aggrid import AgGrid, ColumnsAutoSizeMode, GridOptionsBuilder
 from streamlit_extras.metric_cards import style_metric_cards
 from streamlit_option_menu import option_menu
-from streamlit_plotly_events import plotly_events
 
 import data as D
 
@@ -41,6 +40,10 @@ SKY_HOVER = "#EAF2F7"    # sky-derived hover wash for nav items
 GOLD_RAMP = [[0.0, "#F2F0EA"], [0.5, "#DCD2B8"], [0.75, "#B9A472"], [1.0, GOLD]]
 FONT_STACK = '"Helvetica Neue", Helvetica, Arial, sans-serif'
 
+# Hide Plotly's floating toolbar — it overlapped the chart titles and is not
+# useful for a read-only report.
+PLOTLY_CONFIG = {"displayModeBar": False, "scrollZoom": False}
+
 st.set_page_config(page_title="CU Boulder–Meta Alignment · Interactive Companion",
                    page_icon="◆", layout="wide")
 
@@ -53,6 +56,18 @@ html, body, [class*="st-"], button, input, select, textarea,
 .ag-theme-alpine, .ag-theme-alpine * {{
     font-family: {FONT_STACK} !important;
 }}
+/* ...but never on icon spans: forcing a text font onto a Material ligature
+   makes it render as the literal glyph name ("keyboard_double_arrow_left"). */
+/* Material icon spans hold a ligature name ("keyboard_double_arrow_left") as
+   their text. The icon font is not always available, in which case that name
+   renders as literal text. Restore the icon font where it exists, and hide the
+   span entirely so the raw name can never leak into the page. */
+[data-testid="stIconMaterial"], [data-testid*="Icon"],
+span[class*="material-symbols"], span[class*="material-icons"] {{
+    font-family: "Material Symbols Rounded", "Material Symbols Outlined",
+                 "Material Icons" !important;
+}}
+[data-testid="stIconMaterial"] {{ display: none !important; }}
 body, .stMarkdown p, .stMarkdown li {{ color: {BLACK}; }}
 
 /* Headings / section titles — CUB Dark Blue */
@@ -104,6 +119,37 @@ a, a:visited {{ color: {SKY} !important; }}
     opacity: .85;
     font-size: 12.5px;
     margin-top: 9px;
+}}
+
+/* Small static tables rendered as HTML (see Segment economics) */
+table.mini {{
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+}}
+table.mini th {{
+    text-align: left;
+    font-weight: 600;
+    color: {DARKBLUE};
+    border-bottom: 1px solid {LINE};
+    padding: 0 6px 7px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+}}
+table.mini td {{
+    padding: 8px 6px;
+    border-bottom: 1px solid {LINE};
+}}
+table.mini tbody tr:last-child td {{ border-bottom: none; }}
+table.mini .n {{ text-align: right; font-variant-numeric: tabular-nums; }}
+
+/* Remove the element toolbar's fullscreen/expand control. Expanding a table
+   replaced the whole page with no visible way back, which read as being
+   navigated off the dashboard. Tables stay inline instead. */
+[data-testid="stElementToolbarButton"]:has([data-testid="StyledFullScreenButton"]),
+[data-testid="StyledFullScreenButton"] {{
+    display: none !important;
 }}
 </style>
 """, unsafe_allow_html=True)
@@ -210,21 +256,6 @@ with st.sidebar:
     if picked != st.session_state.route:
         st.session_state.route = picked
         st.rerun()
-    if st.session_state.route != "all":
-        if st.button("Clear route filter", width="stretch"):
-            st.session_state.route = "all"
-            st.rerun()
-    # Full reset: route, scenario and section back to defaults in one click, so
-    # a reader never has to reload the browser to start over.
-    if st.button("Reset view", width="stretch",
-                 help="Clear the route filter and scenario, and return to Overview"):
-        st.session_state.route = "all"
-        st.session_state.scen = "none"
-        st.session_state.section = SECTIONS[0]
-        # option_menu holds its own selection under its key; drop it so the
-        # menu re-mounts on Overview rather than restoring the old tab.
-        st.session_state.pop("section_menu", None)
-        st.rerun()
     section = option_menu(
         menu_title=None,
         options=SECTIONS,
@@ -244,6 +275,25 @@ with st.sidebar:
     )
     st.session_state.section = section
 
+    # Reset controls sit at the bottom, out of the reading path — small, side by
+    # side, and only offered when there is something to clear.
+    st.divider()
+    b1, b2 = st.columns(2)
+    if b1.button("Clear route", width="stretch",
+                 disabled=st.session_state.route == "all",
+                 help="Show all routes again"):
+        st.session_state.route = "all"
+        st.rerun()
+    if b2.button("Reset view", width="stretch",
+                 help="Clear the route filter and scenario, and return to Overview"):
+        st.session_state.route = "all"
+        st.session_state.scen = "none"
+        st.session_state.section = SECTIONS[0]
+        # option_menu holds its own selection under its key; drop it so the
+        # menu re-mounts on Overview rather than restoring the old tab.
+        st.session_state.pop("section_menu", None)
+        st.rerun()
+
 cur = st.session_state.route
 is_all = cur == "all"
 
@@ -251,16 +301,22 @@ is_all = cur == "all"
 # --------------------------------------------------------------- overview ----
 def render_overview():
     st.header("01 · Overview")
+    # The four report-level KPIs always stay visible; a selected route adds its
+    # own row beneath rather than replacing them.
     if is_all:
         quote("From the report:", "Meta is not one partner. The report should map CU strengths "
               "against Meta route surfaces, not against ‘Meta’ generally.")
-        kpi_row([("$4.80M", "Awarded value", "19 direct records"),
-                 ("38", "Confirmed engagements", "386,778 rows scanned"),
-                 ("44", "Researchers named", "56 route assignments"),
-                 ("152", "Alumni coded", "routing intelligence")])
     else:
+        st.caption(D.R[cur]["d"])
+
+    kpi_row([("$4.80M", "Awarded value", "19 direct records"),
+             ("38", "Confirmed engagements", "386,778 rows scanned"),
+             ("44", "Researchers named", "56 route assignments"),
+             ("152", "Alumni coded", "routing intelligence")])
+
+    if not is_all:
         r = D.R[cur]
-        st.caption(r["d"])
+        st.markdown(f"**{r['n']}** — this route")
         kpi_row([(f"{r['w']:.1f}", "Weighted priority", f"rank {D.O.index(cur) + 1} of 8"),
                  (money(D.FUND[cur][0]), "Awarded", f"proposed {money(D.FUND[cur][1])}"),
                  (str(D.JOBS.get(cur, 0)), "Open Meta roles", "of 293 parsed"),
@@ -273,19 +329,23 @@ def render_overview():
         order = list(reversed(D.O))  # plotly draws horizontal bars bottom-up
         rank = pd.DataFrame({"Route": [D.R[k]["n"] for k in order],
                              "Score": [D.R[k]["w"] for k in order]})
-        # Text is pre-formatted: plotly_events renders without Streamlit's
-        # default template, so texttemplate placeholders would show literally.
         rank["Label"] = [f"{v:.1f}" for v in rank["Score"]]
-        fig = px.bar(rank, x="Score", y="Route", orientation="h",
-                     range_x=[0, 5], text="Label")
+        fig = px.bar(rank, x="Score", y="Route", orientation="h", text="Label")
         fig.update_traces(
             marker_color=[GOLD if (is_all or k == cur) else MUTED for k in order],
             textposition="outside",
             hovertemplate="%{y}<br>Weighted score %{x:.1f}<extra></extra>")
-        clicks = plotly_events(bar_layout(fig, 340, "weighted score, 0 to 5"),
-                               click_event=True, override_height=340, key="rank_click")
-        if clicks:
-            idx = clicks[0].get("pointIndex", clicks[0].get("pointNumber"))
+        bar_layout(fig, 340, "weighted score, 0 to 5")
+        # Lock the axis to the 0-5 scoring scale and drop the gridlines, so the
+        # bars read against the rubric rather than an auto-fitted range.
+        fig.update_xaxes(range=[0, 5], dtick=1, showgrid=False)
+        fig.update_yaxes(showgrid=False)
+        ev = st.plotly_chart(fig, key="rank_click", on_select="rerun",
+                             selection_mode="points", config=PLOTLY_CONFIG,
+                             width="stretch")
+        pts = (ev.selection or {}).get("points") if ev else None
+        if pts:
+            idx = pts[0].get("point_index")
             if idx is not None and 0 <= idx < len(order) and set_route(order[idx]):
                 st.rerun()
         st.caption("Weighted from strategic importance, investment signal, market momentum, "
@@ -313,7 +373,7 @@ def render_overview():
                           xaxis_title="score, 1 to 5", yaxis_title=None,
                           plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                           legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0, title=None))
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, config=PLOTLY_CONFIG, width="stretch")
         quote("From the report:", "High-scoring routes are not all equally actionable: "
               "infrastructure is highly durable but poorly routed; trust/safety is highly durable "
               "but sensitive; Reality Labs is the most concrete first handshake.")
@@ -335,10 +395,13 @@ def render_overview():
         fig.update_layout(height=360, margin=dict(l=0, r=10, t=10, b=10),
                           plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                           xaxis=dict(side="top"))
-        clicks = plotly_events(fig, click_event=True, override_height=380, key="hm_click")
-        if clicks:
+        ev = st.plotly_chart(fig, key="hm_click", on_select="rerun",
+                             selection_mode="points", config=PLOTLY_CONFIG,
+                             width="stretch")
+        pts = (ev.selection or {}).get("points") if ev else None
+        if pts:
             # Heatmap click returns y = the route name; map it back to a route key.
-            yv = clicks[0].get("y")
+            yv = pts[0].get("y")
             hit = next((k for k in D.O if D.R[k]["n"] == yv), None)
             if hit and set_route(hit):
                 st.rerun()
@@ -386,7 +449,7 @@ def render_route_detail():
                               polar=dict(radialaxis=dict(range=[0, 5], dtick=1),
                                          bgcolor="rgba(0,0,0,0)"),
                               paper_bgcolor="rgba(0,0,0,0)", showlegend=False)
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, config=PLOTLY_CONFIG, width="stretch")
 
     with right:
         with card():
@@ -413,7 +476,7 @@ def render_route_detail():
             fig.update_traces(marker_color=sdf["color"], textposition="outside",
                               customdata=sdf[["Total"]],
                               hovertemplate="%{y}<br>%{x} of %{customdata[0]}<extra></extra>")
-            st.plotly_chart(bar_layout(fig, 380, "records"), width="stretch")
+            st.plotly_chart(bar_layout(fig, 380, "records"), config=PLOTLY_CONFIG, width="stretch")
             st.caption("Sage = Meta-side signal · gold = CU-side evidence · grey = alumni. "
                        "Each count is shown out of its total possible.")
 
@@ -443,7 +506,7 @@ def render_company():
                               annotations=[dict(text="98.9%<br>Family of Apps",
                                                 showarrow=False, font_size=14)],
                               legend=dict(orientation="h", y=-0.1))
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, config=PLOTLY_CONFIG, width="stretch")
             quote("From the report:", "The financial imbalance between the two segments is the "
                   "central company fact.")
 
@@ -451,10 +514,18 @@ def render_company():
         with card():
             st.subheader("Segment economics")
             st.caption("FY2025")
-            st.dataframe(pd.DataFrame(
-                [[r[0], r[1], r[2] if r[2] else ""] for r in D.SEGMENT_ECONOMICS],
-                columns=["Segment", "Revenue", "Operating result"]),
-                hide_index=True, width="stretch")
+            # Three columns in a one-third-width column get clipped by
+            # st.dataframe's fixed layout, so this small static table is plain
+            # HTML — it wraps, and has no fullscreen control to get lost in.
+            rows = "".join(
+                f"<tr><td>{r[0]}</td><td class='n'>{r[1]}</td>"
+                f"<td class='n'>{r[2] if r[2] else ''}</td></tr>"
+                for r in D.SEGMENT_ECONOMICS)
+            st.markdown(
+                "<table class='mini'><thead><tr><th>Segment</th>"
+                "<th class='n'>Revenue</th><th class='n'>Operating result</th>"
+                f"</tr></thead><tbody>{rows}</tbody></table>",
+                unsafe_allow_html=True)
             st.caption("Family of Apps: *“Cash engine; funds AI, infrastructure, safety, product, "
                        "and long-term platform bets.”* Reality Labs: *“Long-term "
                        "next-computing-platform bet; strategically important but economically "
@@ -473,7 +544,7 @@ def render_company():
                               annotations=[dict(text="72.2%<br>Meta", showarrow=False,
                                                 font_size=14)],
                               legend=dict(orientation="h", y=-0.1))
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, config=PLOTLY_CONFIG, width="stretch")
             quote("From the report:", "IDC reports Meta led the global XR market in 2025 with "
                   "72.2% share… while Meta Quest VR headset shipments declined 42.3% year over "
                   "year.")
@@ -493,7 +564,7 @@ def render_company():
                           yaxis_title="US$SKY", plot_bgcolor="rgba(0,0,0,0)",
                           paper_bgcolor="rgba(0,0,0,0)",
                           legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0, title=None))
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, config=PLOTLY_CONFIG, width="stretch")
         st.caption("Revenue grew from $134.9B to $201.0B across three years; net income from "
                    "$39.1B to $75.7B. From the report: *“Meta’s Q1 2026 outlook raised 2026 capex "
                    "guidance to $125B–$145B, citing higher component pricing and additional data "
@@ -522,7 +593,7 @@ def render_company():
                               plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                               legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0,
                                           title=None))
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, config=PLOTLY_CONFIG, width="stretch")
             quote("From the working deck:", "Jobs → infrastructure. Patents → Reality Labs / "
                   "wearables. This means Chris should ask whether the university partnership lead "
                   "can route both lanes — the AI/data-center owners may be different from Reality "
@@ -545,7 +616,7 @@ def render_company():
             fig.update_layout(height=460, margin=dict(l=0, r=40, t=10, b=10),
                               xaxis_title="term frequency in patent titles",
                               plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, config=PLOTLY_CONFIG, width="stretch")
             quote("From the briefing report:", "Meta’s newest filings are hardware, not social "
                   "features — a direct read on sustained Reality Labs R&D.")
 
@@ -574,7 +645,7 @@ def render_cu():
                               yaxis_title="rows", plot_bgcolor="rgba(0,0,0,0)",
                               paper_bgcolor="rgba(0,0,0,0)")
             fig.update_xaxes(dtick=1)
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, config=PLOTLY_CONFIG, width="stretch")
             st.caption("The source file is labelled 2020–2025 but includes some 2019 rows.")
 
         with card():
@@ -611,7 +682,7 @@ def render_cu():
                               plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                               legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0,
                                           title=None))
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, config=PLOTLY_CONFIG, width="stretch")
             quote("From the report:", "The formal eRA evidence shows that CU Boulder’s direct Meta "
                   "activity is concentrated in Reality Labs / XR / wearables / displays / human "
                   "interfaces.")
@@ -623,7 +694,7 @@ def render_cu():
             fig = px.bar(alum, x="Count", y="Function", orientation="h", text="Count")
             fig.update_traces(marker_color=MUTED, textposition="outside",
                               hovertemplate="%{y}<br>%{x} alumni<extra></extra>")
-            st.plotly_chart(bar_layout(fig, 340, "coded records"), width="stretch")
+            st.plotly_chart(bar_layout(fig, 340, "coded records"), config=PLOTLY_CONFIG, width="stretch")
             quote("From the report:", "Alumni can help identify language, teams, and internal "
                   "routing, but they should not be represented as committed contacts or "
                   "partnership sponsors without validation.")
@@ -750,7 +821,7 @@ def render_foresight():
                 marker_opacity=[1 if k in s["r"] else 0.3 for k in order],
                 texttemplate="%{text:.1f}", textposition="outside",
                 hovertemplate="%{y}<br>Weighted score %{x:.1f}<extra></extra>")
-            st.plotly_chart(bar_layout(fig, 340, "weighted score, 0 to 5"), width="stretch")
+            st.plotly_chart(bar_layout(fig, 340, "weighted score, 0 to 5"), config=PLOTLY_CONFIG, width="stretch")
             st.caption(f"Leading routes: {', '.join(D.R[k]['n'] for k in s['r'])}.")
             st.warning(f"**Risk or caution.** {s['c']}")
 

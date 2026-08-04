@@ -1,11 +1,8 @@
-# Pinned. streamlit-plotly-events 0.0.6 is unmaintained and breaks on some
-# Streamlit versions, so the whole set is fixed to a combination verified to
-# work together (tested on Python 3.13, which is what Streamlit Community
-# Cloud provides). Do not unpin without re-testing click-to-filter.
+# Pinned to a combination verified to work together (tested on Python 3.13,
+# which is what Streamlit Community Cloud provides).
 streamlit==1.60.0
 plotly==6.9.0
 pandas==3.0.5
 streamlit-aggrid==1.2.1.post2
 streamlit-extras==1.6.0
 streamlit-option-menu==0.4.0
-streamlit-plotly-events==0.0.6
