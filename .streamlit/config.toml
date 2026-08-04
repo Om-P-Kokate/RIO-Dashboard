@@ -1,0 +1,19 @@
+[theme]
+# CU Boulder official brand palette. Pairings are taken as-given from the CU
+# Boulder brand accessibility guide and must not be recombined — notably,
+# CU Gold #CFB87C is nav-bar-only (1.94:1 on white, fails AA); Accessible CU
+# Gold #8D7334 is the gold used on white (4.53:1, passes AA).
+primaryColor = "#8D7334"              # Accessible CU Gold — accent
+backgroundColor = "#FFFFFF"           # white
+secondaryBackgroundColor = "#FFFFFF"  # white
+textColor = "#000000"                 # black
+linkColor = "#096FAE"                 # CUB Sky Blue
+headingFont = '"Helvetica Neue", Helvetica, Arial, sans-serif'
+font = '"Helvetica Neue", Helvetica, Arial, sans-serif'
+codeFont = '"Helvetica Neue", Helvetica, Arial, sans-serif'
+
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false

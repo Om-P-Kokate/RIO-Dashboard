@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+
+# Nothing from the parent report folders belongs in this repo — they hold
+# licensed market reports (Frost & Sullivan, "Unauthorized Distribution
+# Prohibited"), PitchBook profiles containing personal contact details, and the
+# raw source PDFs. The app is self-contained; keep it that way.
+*.pdf
+*.docx
+*.xlsx
+*.pptx
+*.zip
+*.m4a
