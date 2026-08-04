@@ -1,6 +1,6 @@
 # CU Boulder–Meta Alignment · Streamlit Companion
 
-Streamlit rebuild of `../Streamlit/CUB-Meta Alignment_Interactive Companion.html`.
+Streamlit rebuild of `../CUB-Meta Alignment_Interactive Companion.html`.
 Same data, same charts, same interactivity — Plotly instead of hand-rolled SVG.
 
 Internal/review use only.
